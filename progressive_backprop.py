@@ -15,7 +15,7 @@ transform = transforms.Compose([
 ])
 trainset = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 trainset = torch.utils.data.Subset(trainset, range(500))
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=12, shuffle=True)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=12, shuffle=False)
 
 # --------------------
 # Build a 5-layer network
@@ -39,7 +39,7 @@ class SimpleNet(nn.Module):
 # --------------------
 # Setup
 # --------------------
-learning_rate = 0.01
+learning_rate = 0.01  # Same learning rate for both methods
 loss_fn = nn.MSELoss()
 batch_limit = 200
 
@@ -72,12 +72,16 @@ for epoch in range(10):
                 p.data -= learning_rate * p.grad
 
         standard_losses.append(loss.item())
+        if i % 50 == 0:  # Print every 50th batch
+            print(f"Standard Backprop - Epoch {epoch}, Batch {i}, Loss: {loss.item():.4f}")
+
+print(f"Standard backprop completed. Total losses recorded: {len(standard_losses)}")
 
 # --------------------
-# 2. Progressive Sequential GD (single forward, 5-layer)
+# 2. Sequential GD (single forward, 5-layer)
 # --------------------
 model.load_state_dict(initial_state)
-print("\n--- Progressive Sequential GD (5-layer) ---")
+print("\n--- Sequential GD (5-layer) ---")
 
 for epoch in range(10):
     for i, (inputs, labels) in enumerate(trainloader):
@@ -88,7 +92,9 @@ for epoch in range(10):
 
         inputs.requires_grad = False
 
-        # --- Forward pass once ---
+        # --- True Sequential GD: Update each layer and recompute forward pass ---
+        
+        # Initial forward pass
         x1 = torch.sigmoid(model.fc1(inputs))
         x2 = torch.sigmoid(model.fc2(x1))
         x3 = torch.sigmoid(model.fc3(x2))
@@ -96,46 +102,82 @@ for epoch in range(10):
         outputs = model.fc5(x4)
         loss = loss_fn(outputs, one_hot_labels)
 
-        # --- Backprop for fc5 ---
+        # Update fc5 and recompute
         grads_fc5 = torch.autograd.grad(loss, model.fc5.parameters(), retain_graph=True)
         for p, g in zip(model.fc5.parameters(), grads_fc5):
             p.data -= learning_rate * g
+        
+        # Recompute forward pass with updated fc5
+        x1 = torch.sigmoid(model.fc1(inputs))
+        x2 = torch.sigmoid(model.fc2(x1))
+        x3 = torch.sigmoid(model.fc3(x2))
+        x4 = torch.sigmoid(model.fc4(x3))
+        outputs = model.fc5(x4)
+        loss = loss_fn(outputs, one_hot_labels)
 
-        # --- Backprop for fc4 ---
+        # Update fc4 and recompute
         dL_dx4 = torch.autograd.grad(loss, x4, retain_graph=True)[0]
         grads_fc4 = torch.autograd.grad(x4, model.fc4.parameters(), grad_outputs=dL_dx4, retain_graph=True)
         for p, g in zip(model.fc4.parameters(), grads_fc4):
             p.data -= learning_rate * g
+        
+        # Recompute forward pass with updated fc4 and fc5
+        x1 = torch.sigmoid(model.fc1(inputs))
+        x2 = torch.sigmoid(model.fc2(x1))
+        x3 = torch.sigmoid(model.fc3(x2))
+        x4 = torch.sigmoid(model.fc4(x3))
+        outputs = model.fc5(x4)
+        loss = loss_fn(outputs, one_hot_labels)
 
-        # --- Backprop for fc3 ---
+        # Update fc3 and recompute
         dL_dx3 = torch.autograd.grad(x4, x3, grad_outputs=dL_dx4, retain_graph=True)[0]
         grads_fc3 = torch.autograd.grad(x3, model.fc3.parameters(), grad_outputs=dL_dx3, retain_graph=True)
         for p, g in zip(model.fc3.parameters(), grads_fc3):
             p.data -= learning_rate * g
+        
+        # Recompute forward pass with updated fc3, fc4, and fc5
+        x1 = torch.sigmoid(model.fc1(inputs))
+        x2 = torch.sigmoid(model.fc2(x1))
+        x3 = torch.sigmoid(model.fc3(x2))
+        x4 = torch.sigmoid(model.fc4(x3))
+        outputs = model.fc5(x4)
+        loss = loss_fn(outputs, one_hot_labels)
 
-        # --- Backprop for fc2 ---
+        # Update fc2 and recompute
         dL_dx2 = torch.autograd.grad(x3, x2, grad_outputs=dL_dx3, retain_graph=True)[0]
         grads_fc2 = torch.autograd.grad(x2, model.fc2.parameters(), grad_outputs=dL_dx2, retain_graph=True)
         for p, g in zip(model.fc2.parameters(), grads_fc2):
             p.data -= learning_rate * g
+        
+        # Recompute forward pass with updated fc2, fc3, fc4, and fc5
+        x1 = torch.sigmoid(model.fc1(inputs))
+        x2 = torch.sigmoid(model.fc2(x1))
+        x3 = torch.sigmoid(model.fc3(x2))
+        x4 = torch.sigmoid(model.fc4(x3))
+        outputs = model.fc5(x4)
+        loss = loss_fn(outputs, one_hot_labels)
 
-        # --- Backprop for fc1 ---
+        # Update fc1 (final update)
         dL_dx1 = torch.autograd.grad(x2, x1, grad_outputs=dL_dx2)[0]
         grads_fc1 = torch.autograd.grad(x1, model.fc1.parameters(), grad_outputs=dL_dx1)
         for p, g in zip(model.fc1.parameters(), grads_fc1):
             p.data -= learning_rate * g
 
         sequential_losses.append(loss.item())
+        if i % 50 == 0:  # Print every 50th batch
+            print(f"Sequential GD - Epoch {epoch}, Batch {i}, Loss: {loss.item():.4f}")
+
+print(f"Sequential GD completed. Total losses recorded: {len(sequential_losses)}")
 
 # --------------------
 # Plot
 # --------------------
 plt.figure(figsize=(12,6))
 line1, = plt.plot(standard_losses, label='Standard Backprop')
-line2, = plt.plot(sequential_losses, label='Progressive Sequential GD (5-layer)')
+line2, = plt.plot(sequential_losses, label='Sequential GD (5-layer)')
 plt.xlabel('Batch (across all epochs)')
 plt.ylabel('Loss')
-plt.title('Loss Comparison: Standard vs Progressive Sequential')
+plt.title('Loss Comparison: Standard vs Sequential GD')
 plt.legend()
 plt.grid(True)
 mplcursors.cursor([line1, line2], hover=True)
