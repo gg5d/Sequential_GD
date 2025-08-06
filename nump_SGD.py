@@ -12,10 +12,10 @@ transform = transforms.Compose([transforms.ToTensor()])
 train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+# train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
+train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=128, shuffle=False)
 
 # 2. Define a very simple neural network
 class SimpleNN(nn.Module):
@@ -30,11 +30,11 @@ class SimpleNN(nn.Module):
         x = torch.sigmoid(self.fc2(x))  # activation
         return x
 
-model = SimpleNN()
-
-# 3. Define loss and learning rate
-criterion = nn.MSELoss()
-learning_rate = 0.05
+def create_model_with_seed(seed):
+    """Create a model with fixed random seed for reproducible results"""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    return SimpleNN()
 
 def standardGD(model, loss, learning_rate):
     # Backward pass
@@ -173,81 +173,123 @@ def numpySGD(model, images, labels_one_hot, learning_rate):
 
     return loss
 
-
-
-# 4. Training loop
-losses = []
-for epoch in range(20):
-    epoch_loss = 0.0
-    batch_count = 0
+def compare_methods(seed=42, epochs=100, learning_rate=0.01):
+    """Compare numpyGD and numpySGD methods with same starting weights"""
     
-    for images, labels in train_loader:
-        # Forward pass
-        outputs = model(images)
-        # Convert labels to one-hot encoding for MSE
-        labels_one_hot = torch.zeros(labels.size(0), 10)
-        labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
-        loss = criterion(outputs, labels_one_hot)
-        
-        # Backward pass and gradient descent
-        # standardGD(model, loss, learning_rate)
-        numpySGD(model, images, labels_one_hot, learning_rate)
-        
-        epoch_loss += loss.item()
-        batch_count += 1
-        losses.append(loss.item())
+    # Create two models with same seed
+    model1 = create_model_with_seed(seed)
+    model2 = create_model_with_seed(seed)
     
-    avg_epoch_loss = epoch_loss / batch_count
-    print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
-
-
-
-
-# 5. Evaluate on test set
-print("\n" + "="*50)
-print("EVALUATION ON TEST SET")
-print("="*50)
-
-model.eval()  # Set model to evaluation mode
-correct = 0
-total = 0
-test_losses = []
-
-with torch.no_grad():
-    for images, labels in test_loader:
-        # Forward pass
-        outputs = model(images)
+    criterion = nn.MSELoss()
+    losses1 = []
+    losses2 = []
+    
+    print(f"Comparing methods with seed {seed}")
+    print("="*50)
+    
+    # Train model1 with numpyGD
+    print("Training with numpyGD...")
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        batch_count = 0
         
-        # Convert labels to one-hot for loss calculation
-        labels_one_hot = torch.zeros(labels.size(0), 10)
-        labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
-        test_loss = criterion(outputs, labels_one_hot)
-        test_losses.append(test_loss.item())
+        for images, labels in train_loader:
+            # Forward pass
+            outputs = model1(images)
+            # Convert labels to one-hot encoding for MSE
+            labels_one_hot = torch.zeros(labels.size(0), 10)
+            labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
+            loss = criterion(outputs, labels_one_hot)
+            
+            # Backward pass and gradient descent
+            numpyGD(model1, images, labels_one_hot, learning_rate)
+            
+            epoch_loss += loss.item()
+            batch_count += 1
+            losses1.append(loss.item())
         
-        # Get predictions
-        _, predicted = torch.max(outputs, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        avg_epoch_loss = epoch_loss / batch_count
+        print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
+    
+    # Train model2 with numpySGD
+    print("\nTraining with numpySGD...")
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        batch_count = 0
+        
+        for images, labels in train_loader:
+            # Forward pass
+            outputs = model2(images)
+            # Convert labels to one-hot encoding for MSE
+            labels_one_hot = torch.zeros(labels.size(0), 10)
+            labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
+            loss = criterion(outputs, labels_one_hot)
+            
+            # Backward pass and gradient descent
+            numpySGD(model2, images, labels_one_hot, learning_rate)
+            
+            epoch_loss += loss.item()
+            batch_count += 1
+            losses2.append(loss.item())
+        
+        avg_epoch_loss = epoch_loss / batch_count
+        print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
+    
+    # Evaluate both models
+    print("\n" + "="*50)
+    print("EVALUATION ON TEST SET")
+    print("="*50)
+    
+    accuracies = []
+    for i, model in enumerate([model1, model2]):
+        method_name = "numpyGD" if i == 0 else "numpySGD"
+        model.eval()
+        correct = 0
+        total = 0
+        test_losses = []
+        
+        with torch.no_grad():
+            for images, labels in test_loader:
+                # Forward pass
+                outputs = model(images)
+                
+                # Convert labels to one-hot for loss calculation
+                labels_one_hot = torch.zeros(labels.size(0), 10)
+                labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
+                test_loss = criterion(outputs, labels_one_hot)
+                test_losses.append(test_loss.item())
+                
+                # Get predictions
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        
+        test_accuracy = 100 * correct / total
+        avg_test_loss = sum(test_losses) / len(test_losses)
+        accuracies.append(test_accuracy)
+        
+        print(f"{method_name} - Test Accuracy: {test_accuracy:.2f}%")
+        print(f"{method_name} - Average Test Loss: {avg_test_loss:.6f}")
+        print(f"{method_name} - Correct Predictions: {correct}/{total}")
+        print("-" * 30)
+    
+    print("="*50)
+    
+    # Plot both losses
+    plt.figure(figsize=(12, 8))
+    line1, = plt.plot(losses1[50:], label='numpyGD Loss', color='blue', markersize=1)
+    line2, = plt.plot(losses2[50:], label='numpySGD Loss', color='red', markersize=1)
+    mplcursors.cursor([line1, line2], hover=True)
+    plt.xlabel('Batch')
+    plt.ylabel('Loss')
+    plt.title('Training Loss Comparison: numpyGD vs numpySGD')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
 
-test_accuracy = 100 * correct / total
-avg_test_loss = sum(test_losses) / len(test_losses)
-
-print(f"Test Accuracy: {test_accuracy:.2f}%")
-print(f"Average Test Loss: {avg_test_loss:.6f}")
-print(f"Correct Predictions: {correct}/{total}")
-print("="*50)
-
-# 6. Plot loss graph
-plt.figure(figsize=(12, 8))
-# Skip the first loss value
-line, = plt.plot(losses[50:], label='Training Loss', markersize=1)
-mplcursors.cursor([line], hover=True)
-plt.xlabel('Batch')
-plt.ylabel('Loss')
-plt.title('Training Loss Over Time')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.show()
+# 4. Training loop - now using comparison function
+if __name__ == "__main__":
+    compare_methods(seed=42, epochs=100, learning_rate=0.01)
 
 
