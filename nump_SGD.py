@@ -14,15 +14,15 @@ test_dataset = datasets.MNIST(root='./data', train=False, download=True, transfo
 
 # train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=128, shuffle=False)
+train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
 
 # 2. Define a very simple neural network
 class SimpleNN(nn.Module):
     def __init__(self):
         super(SimpleNN, self).__init__()
-        self.fc1 = nn.Linear(28*28, 16)  # first layer
-        self.fc2 = nn.Linear(16, 10)     # output layer (10 classes)
+        self.fc1 = nn.Linear(28*28, 128)  # first layer
+        self.fc2 = nn.Linear(128, 10)     # output layer (10 classes)
 
     def forward(self, x):
         x = x.view(-1, 28*28)        # flatten 28x28 to 784
@@ -31,7 +31,7 @@ class SimpleNN(nn.Module):
         return x
 
 def create_model_with_seed(seed):
-    """Create a model with fixed random seed for reproducible results"""
+    #Create a model with fixed random seed for reproducible results
     torch.manual_seed(seed)
     np.random.seed(seed)
     return SimpleNN()
@@ -174,21 +174,23 @@ def numpySGD(model, images, labels_one_hot, learning_rate):
     return loss
 
 def compare_methods(seed=42, epochs=100, learning_rate=0.01):
-    """Compare numpyGD and numpySGD methods with same starting weights"""
+    #Compare normalGD, numpyGD and numpySGD methods with same starting weights
     
-    # Create two models with same seed
+    # Create three models with same seed
     model1 = create_model_with_seed(seed)
     model2 = create_model_with_seed(seed)
+    model3 = create_model_with_seed(seed)
     
     criterion = nn.MSELoss()
     losses1 = []
     losses2 = []
+    losses3 = []
     
     print(f"Comparing methods with seed {seed}")
     print("="*50)
     
-    # Train model1 with numpyGD
-    print("Training with numpyGD...")
+    # Train model1 with normalGD
+    print("Training with normalGD...")
     for epoch in range(epochs):
         epoch_loss = 0.0
         batch_count = 0
@@ -202,7 +204,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
             loss = criterion(outputs, labels_one_hot)
             
             # Backward pass and gradient descent
-            numpyGD(model1, images, labels_one_hot, learning_rate)
+            standardGD(model1, loss, learning_rate)
             
             epoch_loss += loss.item()
             batch_count += 1
@@ -211,8 +213,8 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
         avg_epoch_loss = epoch_loss / batch_count
         print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
     
-    # Train model2 with numpySGD
-    print("\nTraining with numpySGD...")
+    # Train model2 with numpyGD
+    print("\nTraining with numpyGD...")
     for epoch in range(epochs):
         epoch_loss = 0.0
         batch_count = 0
@@ -226,7 +228,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
             loss = criterion(outputs, labels_one_hot)
             
             # Backward pass and gradient descent
-            numpySGD(model2, images, labels_one_hot, learning_rate)
+            numpyGD(model2, images, labels_one_hot, learning_rate)
             
             epoch_loss += loss.item()
             batch_count += 1
@@ -235,14 +237,38 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
         avg_epoch_loss = epoch_loss / batch_count
         print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
     
-    # Evaluate both models
+    # Train model3 with numpySGD
+    print("\nTraining with numpySGD...")
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        batch_count = 0
+        
+        for images, labels in train_loader:
+            # Forward pass
+            outputs = model3(images)
+            # Convert labels to one-hot encoding for MSE
+            labels_one_hot = torch.zeros(labels.size(0), 10)
+            labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
+            loss = criterion(outputs, labels_one_hot)
+            
+            # Backward pass and gradient descent
+            numpySGD(model3, images, labels_one_hot, learning_rate)
+            
+            epoch_loss += loss.item()
+            batch_count += 1
+            losses3.append(loss.item())
+        
+        avg_epoch_loss = epoch_loss / batch_count
+        print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
+    
+    # Evaluate all three models
     print("\n" + "="*50)
     print("EVALUATION ON TEST SET")
     print("="*50)
     
     accuracies = []
-    for i, model in enumerate([model1, model2]):
-        method_name = "numpyGD" if i == 0 else "numpySGD"
+    for i, model in enumerate([model1, model2, model3]):
+        method_name = "normalGD" if i == 0 else "numpyGD" if i == 1 else "numpySGD"
         model.eval()
         correct = 0
         total = 0
@@ -275,21 +301,23 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     
     print("="*50)
     
-    # Plot both losses
+    # Plot all three losses
     plt.figure(figsize=(12, 8))
-    line1, = plt.plot(losses1[50:], label='numpyGD Loss', color='blue', markersize=1)
-    line2, = plt.plot(losses2[50:], label='numpySGD Loss', color='red', markersize=1)
-    mplcursors.cursor([line1, line2], hover=True)
+    line1, = plt.plot(losses1[50:], label='normalGD Loss', color='blue', markersize=1)
+    line2, = plt.plot(losses2[50:], label='numpyGD Loss', color='red', markersize=1)
+    line3, = plt.plot(losses3[50:], label='numpySGD Loss', color='green', markersize=1)
+    mplcursors.cursor([line1, line2, line3], hover=True)
     plt.xlabel('Batch')
     plt.ylabel('Loss')
-    plt.title('Training Loss Comparison: numpyGD vs numpySGD')
+    plt.title('Training Loss Comparison: normalGD vs numpyGD vs numpySGD')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f'100epochs_random/loss_comparison_seed_{seed}.png')
 
 # 4. Training loop - now using comparison function
 if __name__ == "__main__":
-    compare_methods(seed=42, epochs=100, learning_rate=0.01)
+    for i in range(1):
+        compare_methods(seed=i, epochs=50, learning_rate=0.1)
 
 
