@@ -50,135 +50,101 @@ def standardGD(model, loss, learning_rate):
                 param.data.add_(-learning_rate * param.grad)
                 param.grad.zero_()
 
-def numpyGD(model, images, labels_one_hot, learning_rate):
-    # STANDARD GD - updates both layers at the same time
-    # same backprop setup as numpySGD but different update order
-    
-    # convert to numpy
-    x = images.view(-1, 28*28).numpy()           # (batch, 784)
-    y = labels_one_hot.numpy()                   # (batch, 10)
+def pytorchGD(model, images, labels_one_hot, learning_rate):
+    # manual backprop with PyTorch tensors; update ALL layers together (standard GD)
+    with torch.no_grad():
+        x = images.view(-1, 28*28)                 # (B, 784)
+        y = labels_one_hot                         # (B, 10)
 
-    # pull out weights/biases
-    W1 = model.fc1.weight.data.numpy()           # (16, 784)
-    b1 = model.fc1.bias.data.numpy()             # (16,)
-    W2 = model.fc2.weight.data.numpy()           # (10, 16)
-    b2 = model.fc2.bias.data.numpy()             # (10,)
+        W1 = model.fc1.weight.detach().clone()     # (H, 784)
+        b1 = model.fc1.bias.detach().clone()       # (H,)
+        W2 = model.fc2.weight.detach().clone()     # (10, H)
+        b2 = model.fc2.bias.detach().clone()       # (10,)
 
-    # forward pass
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-    
-    # layer 1
-    z1 = x @ W1.T + b1          # (batch, 16)
-    a1 = sigmoid(z1)            # (batch, 16)
-    # layer 2
-    z2 = a1 @ W2.T + b2         # (batch, 10)
-    a2 = sigmoid(z2)            # (batch, 10)
-    
-    # compute loss
-    loss = np.mean((a2 - y) ** 2)
+        def sigmoid(t): return 1.0 / (1.0 + torch.exp(-t))
 
-    # backprop (chain rule)
-    # dL/da2 = 2*(a2 - y)/batch
-    batch_size = x.shape[0]
-    dA2 = 2 * (a2 - y) / (batch_size*10)
+        z1 = x @ W1.t() + b1                       # (B, H)
+        a1 = sigmoid(z1)                           # (B, H)
+        z2 = a1 @ W2.t() + b2                      # (B, 10)
+        a2 = sigmoid(z2)                           # (B, 10)
 
-    # sigmoid derivative
-    dZ2 = dA2 * a2 * (1 - a2)          # (batch, 10)
+        # MSE(mean) matching: divide by batch_size * 10
+        B = x.shape[0]
+        dA2 = 2.0 * (a2 - y) / (B * 10)
 
-    # gradients for layer 2
-    dW2 = dZ2.T @ a1                   # (10, 16)
-    db2 = np.sum(dZ2, axis=0)          # (10,)
+        dZ2 = dA2 * a2 * (1.0 - a2)                # (B, 10)
+        dW2 = dZ2.t() @ a1                         # (10, H)
+        db2 = dZ2.sum(dim=0)                       # (10,)
 
-    # now backprop to layer 1
-    dA1 = dZ2 @ W2                     # (batch, 16)
-    dZ1 = dA1 * a1 * (1 - a1)          # (batch, 16)
+        dA1 = dZ2 @ W2                             # (B, H)
+        dZ1 = dA1 * a1 * (1.0 - a1)                # (B, H)
+        dW1 = dZ1.t() @ x                          # (H, 784)
+        db1 = dZ1.sum(dim=0)                       # (H,)
 
-    # gradients for layer 1
-    dW1 = dZ1.T @ x                    # (16, 784)
-    db1 = np.sum(dZ1, axis=0)          # (16,)
+        W2 -= learning_rate * dW2
+        b2 -= learning_rate * db2
+        W1 -= learning_rate * dW1
+        b1 -= learning_rate * db1
 
-    # UPDATE BOTH LAYERS TOGETHER (this is the standard way)
-    W2 -= learning_rate * dW2
-    b2 -= learning_rate * db2
+        model.fc1.weight.copy_(W1)
+        model.fc1.bias.copy_(b1)
+        model.fc2.weight.copy_(W2)
+        model.fc2.bias.copy_(b2)
 
-    # update layer 1 at the same time
-    W1 -= learning_rate * dW1
-    b1 -= learning_rate * db1
-
-    # copy everything back
-    model.fc1.weight.data.copy_(torch.from_numpy(W1))
-    model.fc1.bias.data.copy_(torch.from_numpy(b1))
-    model.fc2.weight.data.copy_(torch.from_numpy(W2))
-    model.fc2.bias.data.copy_(torch.from_numpy(b2))
-
-    return loss
+    # return a scalar loss value to match original behavior
+    loss_val = torch.mean((a2 - y) ** 2).item()
+    return loss_val
 
 
+def pytorchSGD(model, images, labels_one_hot, learning_rate):
+    # manual backprop with PyTorch tensors; SEQUENTIAL: update layer 2, then layer 1 (using updated W2)
+    with torch.no_grad():
+        x = images.view(-1, 28*28)                 # (B, 784)
+        y = labels_one_hot                         # (B, 10)
 
-def numpySGD(model, images, labels_one_hot, learning_rate):
-    # SEQUENTIAL GD - updates layer 2 first then layer 1
-    # same backprop setup as numpyGD but different update order
-    
-    # convert to numpy
-    x = images.view(-1, 28*28).numpy()           # (batch, 784)
-    y = labels_one_hot.numpy()                   # (batch, 10)
+        W1 = model.fc1.weight.detach().clone()     # (H, 784)
+        b1 = model.fc1.bias.detach().clone()       # (H,)
+        W2 = model.fc2.weight.detach().clone()     # (10, H)
+        b2 = model.fc2.bias.detach().clone()       # (10,)
 
-    # pull out weights/biases
-    W1 = model.fc1.weight.data.numpy()           # (16, 784)
-    b1 = model.fc1.bias.data.numpy()             # (16,)
-    W2 = model.fc2.weight.data.numpy()           # (10, 16)
-    b2 = model.fc2.bias.data.numpy()             # (10,)
+        def sigmoid(t): return 1.0 / (1.0 + torch.exp(-t))
 
-    # forward pass
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-    
-    # layer 1
-    z1 = x @ W1.T + b1          # (batch, 16)
-    a1 = sigmoid(z1)            # (batch, 16)
-    # layer 2
-    z2 = a1 @ W2.T + b2         # (batch, 10)
-    a2 = sigmoid(z2)            # (batch, 10)
-    
-    # compute loss
-    loss = np.mean((a2 - y) ** 2)
+        z1 = x @ W1.t() + b1                       # (B, H)
+        a1 = sigmoid(z1)                           # (B, H)
+        z2 = a1 @ W2.t() + b2                      # (B, 10)
+        a2 = sigmoid(z2)                           # (B, 10)
 
-    # backprop (chain rule)
-    # dL/da2 = 2*(a2 - y)/batch
-    batch_size = x.shape[0]
-    dA2 = 2 * (a2 - y) / (batch_size*10)
+        # MSE(mean) matching: divide by batch_size * 10
+        B = x.shape[0]
+        dA2 = 2.0 * (a2 - y) / (B * 10)
 
-    # sigmoid derivative
-    dZ2 = dA2 * a2 * (1 - a2)          # (batch, 10)
+        dZ2 = dA2 * a2 * (1.0 - a2)                # (B, 10)
+        dW2 = dZ2.t() @ a1                         # (10, H)
+        db2 = dZ2.sum(dim=0)                       # (10,)
 
-    # gradients for layer 2
-    dW2 = dZ2.T @ a1                   # (10, 16)
-    db2 = np.sum(dZ2, axis=0)          # (10,)
+        # UPDATE LAYER 2 FIRST
+        W2 -= learning_rate * dW2
+        b2 -= learning_rate * db2
 
-    # UPDATE LAYER 2 FIRST (this is the sequential part)
-    W2 -= learning_rate * dW2
-    b2 -= learning_rate * db2
+        # backprop to layer 1 using UPDATED W2
+        dA1 = dZ2 @ W2                             # (B, H)
+        dZ1 = dA1 * a1 * (1.0 - a1)                # (B, H)
+        dW1 = dZ1.t() @ x                          # (H, 784)
+        db1 = dZ1.sum(dim=0)                       # (H,)
 
-    # now backprop to layer 1
-    dA1 = dZ2 @ W2                     # (batch, 16)
-    dZ1 = dA1 * a1 * (1 - a1)          # (batch, 16)
+        # then update layer 1
+        W1 -= learning_rate * dW1
+        b1 -= learning_rate * db1
 
-    # gradients for layer 1
-    dW1 = dZ1.T @ x                    # (16, 784)
-    db1 = np.sum(dZ1, axis=0)          # (16,)
+        model.fc1.weight.copy_(W1)
+        model.fc1.bias.copy_(b1)
+        model.fc2.weight.copy_(W2)
+        model.fc2.bias.copy_(b2)
 
-    # update layer 1 after layer 2
-    W1 -= learning_rate * dW1
-    b1 -= learning_rate * db1
+    # return a scalar loss value to match original behavior
+    loss_val = torch.mean((a2 - y) ** 2).item()
+    return loss_val
 
-    # copy everything back
-    model.fc1.weight.data.copy_(torch.from_numpy(W1))
-    model.fc1.bias.data.copy_(torch.from_numpy(b1))
-    model.fc2.weight.data.copy_(torch.from_numpy(W2))
-    model.fc2.bias.data.copy_(torch.from_numpy(b2))
-
-    return loss
 
 def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     # train 3 models with different methods and compare them
