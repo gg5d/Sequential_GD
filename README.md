@@ -41,6 +41,18 @@ The meaning of the text is clear from the plots generated that examine the curve
 
 ---
 
+## Updates
+
+**October 7th 2025**
+
+- Rewrote all the NumPy code to use **PyTorch tensors** instead. This makes it possible to run everything on the GPU while keeping the same manual backprop logic.  
+- Made the network architecture **fully flexible**. The code now builds however many layers you list in `layer_sizes`, so you don’t need to hardcode each layer anymore.  
+- Added support for different activation functions. You can now pick between **sigmoid**, **ReLU**, or **leaky ReLU** when running `compare_methods()`.  
+- The training code now works with **MNIST**, **FashionMNIST**, and **CIFAR-10**, with the right input size and normalization handled automatically.
+
+Overall, the project is now more flexible, faster, and easier to scale without changing the core idea of comparing sequential vs. standard gradient descent.  
+
+
 ## Requirements
 
 - Python 3.8+  

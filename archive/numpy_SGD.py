@@ -15,7 +15,7 @@ transform = transforms.Compose([transforms.ToTensor()])
 train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-# train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
@@ -360,4 +360,4 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
 # run the comparison
 if __name__ == "__main__":
     for i in range(1):
-        compare_methods(seed=i, epochs=100, learning_rate=0.1)
+        compare_methods(seed=i, epochs=200, learning_rate=0.1)

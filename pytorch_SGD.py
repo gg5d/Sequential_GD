@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
-import numpy as np
 import os
 import time
 
@@ -15,7 +14,7 @@ transform = transforms.Compose([transforms.ToTensor()])
 train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-# train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
@@ -35,7 +34,6 @@ class SimpleNN(nn.Module):
 def create_model_with_seed(seed):
     # makes a model with same starting weights every time (for fair comparison)
     torch.manual_seed(seed)
-    np.random.seed(seed)
     return SimpleNN()
 
 def standardGD(model, loss, learning_rate):
@@ -50,100 +48,139 @@ def standardGD(model, loss, learning_rate):
                 param.data.add_(-learning_rate * param.grad)
                 param.grad.zero_()
 
+
+
+
 def pytorchGD(model, images, labels_one_hot, learning_rate):
-    # manual backprop with PyTorch tensors; update ALL layers together (standard GD)
-    with torch.no_grad():
-        x = images.view(-1, 28*28)                 # (B, 784)
-        y = labels_one_hot                         # (B, 10)
+    # STANDARD GD - updates both layers at the same time
+    # same backprop setup as pytorchSGD but different update order
+    
+    # convert to pytorch
+    x = images.view(-1, 28*28)           # (batch, 784)
+    y = labels_one_hot                   # (batch, 10)
 
-        W1 = model.fc1.weight.detach().clone()     # (H, 784)
-        b1 = model.fc1.bias.detach().clone()       # (H,)
-        W2 = model.fc2.weight.detach().clone()     # (10, H)
-        b2 = model.fc2.bias.detach().clone()       # (10,)
+    # pull out weights/biases
+    W1 = model.fc1.weight.data.clone()           # (16, 784)
+    b1 = model.fc1.bias.data.clone()             # (16,)
+    W2 = model.fc2.weight.data.clone()           # (10, 16)
+    b2 = model.fc2.bias.data.clone()             # (10,)
 
-        def sigmoid(t): return 1.0 / (1.0 + torch.exp(-t))
+    # forward pass
+    def sigmoid(x):
+        return 1 / (1 + torch.exp(-x))
+    
+    # layer 1
+    z1 = x @ W1.T + b1          # (batch, 16)
+    a1 = sigmoid(z1)            # (batch, 16)
+    # layer 2
+    z2 = a1 @ W2.T + b2         # (batch, 10)
+    a2 = sigmoid(z2)            # (batch, 10)
+    
+    # compute loss
+    loss = torch.mean((a2 - y) ** 2)
 
-        z1 = x @ W1.t() + b1                       # (B, H)
-        a1 = sigmoid(z1)                           # (B, H)
-        z2 = a1 @ W2.t() + b2                      # (B, 10)
-        a2 = sigmoid(z2)                           # (B, 10)
+    # backprop (chain rule)
+    # dL/da2 = 2*(a2 - y)/batch
+    batch_size = x.shape[0]
+    dA2 = 2 * (a2 - y) / (batch_size*10)
 
-        # MSE(mean) matching: divide by batch_size * 10
-        B = x.shape[0]
-        dA2 = 2.0 * (a2 - y) / (B * 10)
+    # sigmoid derivative
+    dZ2 = dA2 * a2 * (1 - a2)          # (batch, 10)
 
-        dZ2 = dA2 * a2 * (1.0 - a2)                # (B, 10)
-        dW2 = dZ2.t() @ a1                         # (10, H)
-        db2 = dZ2.sum(dim=0)                       # (10,)
+    # gradients for layer 2
+    dW2 = dZ2.T @ a1                   # (10, 16)
+    db2 = torch.sum(dZ2, dim=0)        # (10,)
 
-        dA1 = dZ2 @ W2                             # (B, H)
-        dZ1 = dA1 * a1 * (1.0 - a1)                # (B, H)
-        dW1 = dZ1.t() @ x                          # (H, 784)
-        db1 = dZ1.sum(dim=0)                       # (H,)
+    # now backprop to layer 1
+    dA1 = dZ2 @ W2                     # (batch, 16)
+    dZ1 = dA1 * a1 * (1 - a1)          # (batch, 16)
 
-        W2 -= learning_rate * dW2
-        b2 -= learning_rate * db2
-        W1 -= learning_rate * dW1
-        b1 -= learning_rate * db1
+    # gradients for layer 1
+    dW1 = dZ1.T @ x                    # (16, 784)
+    db1 = torch.sum(dZ1, dim=0)        # (16,)
 
-        model.fc1.weight.copy_(W1)
-        model.fc1.bias.copy_(b1)
-        model.fc2.weight.copy_(W2)
-        model.fc2.bias.copy_(b2)
+    # UPDATE BOTH LAYERS TOGETHER (this is the standard way)
+    W2 -= learning_rate * dW2
+    b2 -= learning_rate * db2
 
-    # return a scalar loss value to match original behavior
-    loss_val = torch.mean((a2 - y) ** 2).item()
-    return loss_val
+    # update layer 1 at the same time
+    W1 -= learning_rate * dW1
+    b1 -= learning_rate * db1
+
+    # copy everything back
+    model.fc1.weight.data.copy_(W1)
+    model.fc1.bias.data.copy_(b1)
+    model.fc2.weight.data.copy_(W2)
+    model.fc2.bias.data.copy_(b2)
+
+    return loss.item()
+
 
 
 def pytorchSGD(model, images, labels_one_hot, learning_rate):
-    # manual backprop with PyTorch tensors; SEQUENTIAL: update layer 2, then layer 1 (using updated W2)
-    with torch.no_grad():
-        x = images.view(-1, 28*28)                 # (B, 784)
-        y = labels_one_hot                         # (B, 10)
+    # SEQUENTIAL GD - updates layer 2 first then layer 1
+    # same backprop setup as pytorchGD but different update order
+    
+    # convert to pytorch
+    x = images.view(-1, 28*28)           # (batch, 784)
+    y = labels_one_hot                   # (batch, 10)
 
-        W1 = model.fc1.weight.detach().clone()     # (H, 784)
-        b1 = model.fc1.bias.detach().clone()       # (H,)
-        W2 = model.fc2.weight.detach().clone()     # (10, H)
-        b2 = model.fc2.bias.detach().clone()       # (10,)
+    # pull out weights/biases
+    W1 = model.fc1.weight.data.clone()           # (16, 784)
+    b1 = model.fc1.bias.data.clone()             # (16,)
+    W2 = model.fc2.weight.data.clone()           # (10, 16)
+    b2 = model.fc2.bias.data.clone()             # (10,)
 
-        def sigmoid(t): return 1.0 / (1.0 + torch.exp(-t))
+    # forward pass
+    def sigmoid(x):
+        return 1 / (1 + torch.exp(-x))
+    
+    # layer 1
+    z1 = x @ W1.T + b1          # (batch, 16)
+    a1 = sigmoid(z1)            # (batch, 16)
+    # layer 2
+    z2 = a1 @ W2.T + b2         # (batch, 10)
+    a2 = sigmoid(z2)            # (batch, 10)
+    
+    # compute loss
+    loss = torch.mean((a2 - y) ** 2)
 
-        z1 = x @ W1.t() + b1                       # (B, H)
-        a1 = sigmoid(z1)                           # (B, H)
-        z2 = a1 @ W2.t() + b2                      # (B, 10)
-        a2 = sigmoid(z2)                           # (B, 10)
+    # backprop (chain rule)
+    # dL/da2 = 2*(a2 - y)/batch
+    batch_size = x.shape[0]
+    dA2 = 2 * (a2 - y) / (batch_size*10)
 
-        # MSE(mean) matching: divide by batch_size * 10
-        B = x.shape[0]
-        dA2 = 2.0 * (a2 - y) / (B * 10)
+    # sigmoid derivative
+    dZ2 = dA2 * a2 * (1 - a2)          # (batch, 10)
 
-        dZ2 = dA2 * a2 * (1.0 - a2)                # (B, 10)
-        dW2 = dZ2.t() @ a1                         # (10, H)
-        db2 = dZ2.sum(dim=0)                       # (10,)
+    # gradients for layer 2
+    dW2 = dZ2.T @ a1                   # (10, 16)
+    db2 = torch.sum(dZ2, dim=0)        # (10,)
 
-        # UPDATE LAYER 2 FIRST
-        W2 -= learning_rate * dW2
-        b2 -= learning_rate * db2
+    # UPDATE LAYER 2 FIRST (this is the sequential part)
+    W2 -= learning_rate * dW2
+    b2 -= learning_rate * db2
 
-        # backprop to layer 1 using UPDATED W2
-        dA1 = dZ2 @ W2                             # (B, H)
-        dZ1 = dA1 * a1 * (1.0 - a1)                # (B, H)
-        dW1 = dZ1.t() @ x                          # (H, 784)
-        db1 = dZ1.sum(dim=0)                       # (H,)
+    # now backprop to layer 1
+    dA1 = dZ2 @ W2                     # (batch, 16)
+    dZ1 = dA1 * a1 * (1 - a1)          # (batch, 16)
 
-        # then update layer 1
-        W1 -= learning_rate * dW1
-        b1 -= learning_rate * db1
+    # gradients for layer 1
+    dW1 = dZ1.T @ x                    # (16, 784)
+    db1 = torch.sum(dZ1, dim=0)        # (16,)
 
-        model.fc1.weight.copy_(W1)
-        model.fc1.bias.copy_(b1)
-        model.fc2.weight.copy_(W2)
-        model.fc2.bias.copy_(b2)
+    # update layer 1 after layer 2
+    W1 -= learning_rate * dW1
+    b1 -= learning_rate * db1
 
-    # return a scalar loss value to match original behavior
-    loss_val = torch.mean((a2 - y) ** 2).item()
-    return loss_val
+    # copy everything back
+    model.fc1.weight.data.copy_(W1)
+    model.fc1.bias.data.copy_(b1)
+    model.fc2.weight.data.copy_(W2)
+    model.fc2.bias.data.copy_(b2)
+
+    return loss.item()
+
 
 
 def compare_methods(seed=42, epochs=100, learning_rate=0.01):
@@ -192,9 +229,9 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     
     normalGD_time = time.time() - normalGD_start
     
-    # train with numpy gradient descent
-    print("\nTraining with numpyGD...")
-    numpyGD_start = time.time()
+    # train with pytorch gradient descent
+    print("\nTraining with pytorchGD...")
+    pytorchGD_start = time.time()
     for epoch in range(epochs):
         epoch_loss = 0.0
         batch_count = 0
@@ -207,8 +244,8 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
             loss = criterion(outputs, labels_one_hot)
             
-            # our custom numpy backprop
-            numpyGD(model2, images, labels_one_hot, learning_rate)
+            # our custom pytorch backprop
+            pytorchGD(model2, images, labels_one_hot, learning_rate)
             
             epoch_loss += loss.item()
             batch_count += 1
@@ -217,11 +254,11 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
         avg_epoch_loss = epoch_loss / batch_count
         print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
     
-    numpyGD_time = time.time() - numpyGD_start
+    pytorchGD_time = time.time() - pytorchGD_start
     
     # train with sequential gradient descent
-    print("\nTraining with numpySGD...")
-    numpySGD_start = time.time()
+    print("\nTraining with pytorchSGD...")
+    pytorchSGD_start = time.time()
     for epoch in range(epochs):
         epoch_loss = 0.0
         batch_count = 0
@@ -235,7 +272,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
             loss = criterion(outputs, labels_one_hot)
             
             # sequential backprop
-            numpySGD(model3, images, labels_one_hot, learning_rate)
+            pytorchSGD(model3, images, labels_one_hot, learning_rate)
             
             epoch_loss += loss.item()
             batch_count += 1
@@ -244,7 +281,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
         avg_epoch_loss = epoch_loss / batch_count
         print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
     
-    numpySGD_time = time.time() - numpySGD_start
+    pytorchSGD_time = time.time() - pytorchSGD_start
     
     # test all 3 models
     print("\n" + "="*50)
@@ -253,7 +290,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     
     accuracies = []
     for i, model in enumerate([model1, model2, model3]):
-        method_name = "normalGD" if i == 0 else "numpyGD" if i == 1 else "numpySGD"
+        method_name = "normalGD" if i == 0 else "pytorchGD" if i == 1 else "pytorchSGD"
         model.eval()
         correct = 0
         total = 0
@@ -287,9 +324,9 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
         if i == 0:
             print(f"{method_name} - Training Time: {normalGD_time:.2f} seconds")
         elif i == 1:
-            print(f"{method_name} - Training Time: {numpyGD_time:.2f} seconds")
+            print(f"{method_name} - Training Time: {pytorchGD_time:.2f} seconds")
         else:
-            print(f"{method_name} - Training Time: {numpySGD_time:.2f} seconds")
+            print(f"{method_name} - Training Time: {pytorchSGD_time:.2f} seconds")
         print("-" * 30)
     
     print("="*50)
@@ -297,17 +334,17 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     # plot the losses
     plt.figure(figsize=(12, 8))
     line1, = plt.plot(losses1[50:], label='normalGD Loss', color='blue', markersize=1)
-    line2, = plt.plot(losses2[50:], label='numpyGD Loss', color='red', markersize=1)
-    line3, = plt.plot(losses3[50:], label='numpySGD Loss', color='green', markersize=1)
+    line2, = plt.plot(losses2[50:], label='pytorchGD Loss', color='red', markersize=1)
+    line3, = plt.plot(losses3[50:], label='pytorchSGD Loss', color='green', markersize=1)
     mplcursors.cursor([line1, line2, line3], hover=True)
     plt.xlabel('Batch')
     plt.ylabel('Loss')
-    plt.title('Training Loss Comparison: normalGD vs numpyGD vs numpySGD')
+    plt.title('Training Loss Comparison: normalGD vs pytorchGD vs pytorchSGD')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    folderName = "single_layer_testing"
+    folderName = "pytorch_SGD_single_layer_testing"
     os.makedirs(folderName, exist_ok=True)
     # check if file exists and add number suffix if needed
     base_filename = f'{folderName}/seed_{seed}_epochs_{epochs}_lr_{learning_rate}'
@@ -323,7 +360,8 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     total_time = time.time() - start_time
     print(f"\nTotal execution time: {total_time:.2f} seconds")
 
+
 # run the comparison
 if __name__ == "__main__":
     for i in range(1):
-        compare_methods(seed=i, epochs=100, learning_rate=0.1)
+        compare_methods(seed=i, epochs=200, learning_rate=0.1)

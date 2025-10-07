@@ -15,7 +15,7 @@ transform = transforms.Compose([transforms.ToTensor()])
 train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-# train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
@@ -51,23 +51,28 @@ def standardGD(model, loss, learning_rate):
                 param.data.add_(-learning_rate * param.grad)
                 param.grad.zero_()
 
-def numpyGD(model, images, labels_one_hot, learning_rate):
-    x = images.view(-1, 28*28).numpy()
-    y = labels_one_hot.numpy()
+def pytorchGD(model, images, labels_one_hot, learning_rate):
+    # STANDARD GD - updates both layers at the same time
+    # same backprop setup as pytorchSGD but different update order
+    
+    # convert to pytorch
+    x = images.view(-1, 28*28)
+    y = labels_one_hot
 
-    W1 = model.fc1.weight.data.numpy()
-    b1 = model.fc1.bias.data.numpy()
-    W2 = model.fc2.weight.data.numpy()
-    b2 = model.fc2.bias.data.numpy()
-    W3 = model.fc3.weight.data.numpy()
-    b3 = model.fc3.bias.data.numpy()
-    W4 = model.fc4.weight.data.numpy()
-    b4 = model.fc4.bias.data.numpy()
-    W5 = model.fc5.weight.data.numpy()
-    b5 = model.fc5.bias.data.numpy()
+    # pull out weights/biases
+    W1 = model.fc1.weight.data.clone()
+    b1 = model.fc1.bias.data.clone()
+    W2 = model.fc2.weight.data.clone()
+    b2 = model.fc2.bias.data.clone()
+    W3 = model.fc3.weight.data.clone()
+    b3 = model.fc3.bias.data.clone()
+    W4 = model.fc4.weight.data.clone()
+    b4 = model.fc4.bias.data.clone()
+    W5 = model.fc5.weight.data.clone()
+    b5 = model.fc5.bias.data.clone()
 
     def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
+        return 1 / (1 + torch.exp(-x))
     
     z1 = x @ W1.T + b1
     a1 = sigmoid(z1)
@@ -80,34 +85,34 @@ def numpyGD(model, images, labels_one_hot, learning_rate):
     z5 = a4 @ W5.T + b5
     a5 = sigmoid(z5)
     
-    loss = np.mean((a5 - y) ** 2)
+    loss = torch.mean((a5 - y) ** 2)
 
     batch_size = x.shape[0]
     dA5 = 2 * (a5 - y) / (batch_size * 10)
     dZ5 = dA5 * a5 * (1 - a5)
 
     dW5 = dZ5.T @ a4
-    db5 = np.sum(dZ5, axis=0)
+    db5 = torch.sum(dZ5, dim=0)
 
     dA4 = dZ5 @ W5
     dZ4 = dA4 * a4 * (1 - a4)
     dW4 = dZ4.T @ a3
-    db4 = np.sum(dZ4, axis=0)
+    db4 = torch.sum(dZ4, dim=0)
 
     dA3 = dZ4 @ W4
     dZ3 = dA3 * a3 * (1 - a3)
     dW3 = dZ3.T @ a2
-    db3 = np.sum(dZ3, axis=0)
+    db3 = torch.sum(dZ3, dim=0)
 
     dA2 = dZ3 @ W3
     dZ2 = dA2 * a2 * (1 - a2)
     dW2 = dZ2.T @ a1
-    db2 = np.sum(dZ2, axis=0)
+    db2 = torch.sum(dZ2, dim=0)
 
     dA1 = dZ2 @ W2
     dZ1 = dA1 * a1 * (1 - a1)
     dW1 = dZ1.T @ x
-    db1 = np.sum(dZ1, axis=0)
+    db1 = torch.sum(dZ1, dim=0)
 
     W5 -= learning_rate * dW5
     b5 -= learning_rate * db5
@@ -120,36 +125,42 @@ def numpyGD(model, images, labels_one_hot, learning_rate):
     W1 -= learning_rate * dW1
     b1 -= learning_rate * db1
 
-    model.fc1.weight.data.copy_(torch.from_numpy(W1))
-    model.fc1.bias.data.copy_(torch.from_numpy(b1))
-    model.fc2.weight.data.copy_(torch.from_numpy(W2))
-    model.fc2.bias.data.copy_(torch.from_numpy(b2))
-    model.fc3.weight.data.copy_(torch.from_numpy(W3))
-    model.fc3.bias.data.copy_(torch.from_numpy(b3))
-    model.fc4.weight.data.copy_(torch.from_numpy(W4))
-    model.fc4.bias.data.copy_(torch.from_numpy(b4))
-    model.fc5.weight.data.copy_(torch.from_numpy(W5))
-    model.fc5.bias.data.copy_(torch.from_numpy(b5))
+    model.fc1.weight.data.copy_(W1)
+    model.fc1.bias.data.copy_(b1)
+    model.fc2.weight.data.copy_(W2)
+    model.fc2.bias.data.copy_(b2)
+    model.fc3.weight.data.copy_(W3)
+    model.fc3.bias.data.copy_(b3)
+    model.fc4.weight.data.copy_(W4)
+    model.fc4.bias.data.copy_(b4)
+    model.fc5.weight.data.copy_(W5)
+    model.fc5.bias.data.copy_(b5)
 
-    return loss
+    return loss.item()
 
-def numpySGD(model, images, labels_one_hot, learning_rate):
-    x = images.view(-1, 28*28).numpy()
-    y = labels_one_hot.numpy()
 
-    W1 = model.fc1.weight.data.numpy()
-    b1 = model.fc1.bias.data.numpy()
-    W2 = model.fc2.weight.data.numpy()
-    b2 = model.fc2.bias.data.numpy()
-    W3 = model.fc3.weight.data.numpy()
-    b3 = model.fc3.bias.data.numpy()
-    W4 = model.fc4.weight.data.numpy()
-    b4 = model.fc4.bias.data.numpy()
-    W5 = model.fc5.weight.data.numpy()
-    b5 = model.fc5.bias.data.numpy()
+
+def pytorchSGD(model, images, labels_one_hot, learning_rate):
+    # SEQUENTIAL GD - updates layer 2 first then layer 1
+    # same backprop setup as pytorchGD but different update order
+    
+    # convert to pytorch
+    x = images.view(-1, 28*28)
+    y = labels_one_hot
+
+    W1 = model.fc1.weight.data.clone()
+    b1 = model.fc1.bias.data.clone()
+    W2 = model.fc2.weight.data.clone()
+    b2 = model.fc2.bias.data.clone()
+    W3 = model.fc3.weight.data.clone()
+    b3 = model.fc3.bias.data.clone()
+    W4 = model.fc4.weight.data.clone()
+    b4 = model.fc4.bias.data.clone()
+    W5 = model.fc5.weight.data.clone()
+    b5 = model.fc5.bias.data.clone()
 
     def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
+        return 1 / (1 + torch.exp(-x))
     
     z1 = x @ W1.T + b1
     a1 = sigmoid(z1)
@@ -162,14 +173,14 @@ def numpySGD(model, images, labels_one_hot, learning_rate):
     z5 = a4 @ W5.T + b5
     a5 = sigmoid(z5)
     
-    loss = np.mean((a5 - y) ** 2)
+    loss = torch.mean((a5 - y) ** 2)
 
     batch_size = x.shape[0]
     dA5 = 2 * (a5 - y) / (batch_size * 10)
     dZ5 = dA5 * a5 * (1 - a5)
 
     dW5 = dZ5.T @ a4
-    db5 = np.sum(dZ5, axis=0)
+    db5 = torch.sum(dZ5, dim=0)
 
     W5 -= learning_rate * dW5
     b5 -= learning_rate * db5
@@ -177,7 +188,7 @@ def numpySGD(model, images, labels_one_hot, learning_rate):
     dA4 = dZ5 @ W5
     dZ4 = dA4 * a4 * (1 - a4)
     dW4 = dZ4.T @ a3
-    db4 = np.sum(dZ4, axis=0)
+    db4 = torch.sum(dZ4, dim=0)
 
     W4 -= learning_rate * dW4
     b4 -= learning_rate * db4
@@ -185,7 +196,7 @@ def numpySGD(model, images, labels_one_hot, learning_rate):
     dA3 = dZ4 @ W4
     dZ3 = dA3 * a3 * (1 - a3)
     dW3 = dZ3.T @ a2
-    db3 = np.sum(dZ3, axis=0)
+    db3 = torch.sum(dZ3, dim=0)
 
     W3 -= learning_rate * dW3
     b3 -= learning_rate * db3
@@ -193,7 +204,7 @@ def numpySGD(model, images, labels_one_hot, learning_rate):
     dA2 = dZ3 @ W3
     dZ2 = dA2 * a2 * (1 - a2)
     dW2 = dZ2.T @ a1
-    db2 = np.sum(dZ2, axis=0)
+    db2 = torch.sum(dZ2, dim=0)
 
     W2 -= learning_rate * dW2
     b2 -= learning_rate * db2
@@ -201,23 +212,25 @@ def numpySGD(model, images, labels_one_hot, learning_rate):
     dA1 = dZ2 @ W2
     dZ1 = dA1 * a1 * (1 - a1)
     dW1 = dZ1.T @ x
-    db1 = np.sum(dZ1, axis=0)
+    db1 = torch.sum(dZ1, dim=0)
 
     W1 -= learning_rate * dW1
     b1 -= learning_rate * db1
 
-    model.fc1.weight.data.copy_(torch.from_numpy(W1))
-    model.fc1.bias.data.copy_(torch.from_numpy(b1))
-    model.fc2.weight.data.copy_(torch.from_numpy(W2))
-    model.fc2.bias.data.copy_(torch.from_numpy(b2))
-    model.fc3.weight.data.copy_(torch.from_numpy(W3))
-    model.fc3.bias.data.copy_(torch.from_numpy(b3))
-    model.fc4.weight.data.copy_(torch.from_numpy(W4))
-    model.fc4.bias.data.copy_(torch.from_numpy(b4))
-    model.fc5.weight.data.copy_(torch.from_numpy(W5))
-    model.fc5.bias.data.copy_(torch.from_numpy(b5))
+    model.fc1.weight.data.copy_(W1)
+    model.fc1.bias.data.copy_(b1)
+    model.fc2.weight.data.copy_(W2)
+    model.fc2.bias.data.copy_(b2)
+    model.fc3.weight.data.copy_(W3)
+    model.fc3.bias.data.copy_(b3)
+    model.fc4.weight.data.copy_(W4)
+    model.fc4.bias.data.copy_(b4)
+    model.fc5.weight.data.copy_(W5)
+    model.fc5.bias.data.copy_(b5)
 
-    return loss
+    return loss.item()
+
+
 
 def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     start_time = time.time()
@@ -251,8 +264,8 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
         print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
     normalGD_time = time.time() - normalGD_start
     
-    print("\nTraining with numpyGD...")
-    numpyGD_start = time.time()
+    print("\nTraining with pytorchGD...")
+    pytorchGD_start = time.time()
     for epoch in range(epochs):
         epoch_loss = 0.0
         batch_count = 0
@@ -261,16 +274,16 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
             labels_one_hot = torch.zeros(labels.size(0), 10)
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
             loss = criterion(outputs, labels_one_hot)
-            numpyGD(model2, images, labels_one_hot, learning_rate)
+            pytorchGD(model2, images, labels_one_hot, learning_rate)
             epoch_loss += loss.item()
             batch_count += 1
             losses2.append(loss.item())
         avg_epoch_loss = epoch_loss / batch_count
         print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
-    numpyGD_time = time.time() - numpyGD_start
+    pytorchGD_time = time.time() - pytorchGD_start
     
-    print("\nTraining with numpySGD...")
-    numpySGD_start = time.time()
+    print("\nTraining with pytorchSGD...")
+    pytorchSGD_start = time.time()
     for epoch in range(epochs):
         epoch_loss = 0.0
         batch_count = 0
@@ -279,20 +292,20 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
             labels_one_hot = torch.zeros(labels.size(0), 10)
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
             loss = criterion(outputs, labels_one_hot)
-            numpySGD(model3, images, labels_one_hot, learning_rate)
+            pytorchSGD(model3, images, labels_one_hot, learning_rate)
             epoch_loss += loss.item()
             batch_count += 1
             losses3.append(loss.item())
         avg_epoch_loss = epoch_loss / batch_count
         print(f"Epoch {epoch+1} completed, Average Loss: {avg_epoch_loss:.6f}")
-    numpySGD_time = time.time() - numpySGD_start
+    pytorchSGD_time = time.time() - pytorchSGD_start
     
     print("\n" + "="*50)
     print("EVALUATION ON TEST SET")
     print("="*50)
     accuracies = []
     for i, model in enumerate([model1, model2, model3]):
-        method_name = "normalGD" if i == 0 else "numpyGD" if i == 1 else "numpySGD"
+        method_name = "normalGD" if i == 0 else "pytorchGD" if i == 1 else "pytorchSGD"
         model.eval()
         correct = 0
         total = 0
@@ -316,25 +329,25 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
         if i == 0:
             print(f"{method_name} - Training Time: {normalGD_time:.2f} seconds")
         elif i == 1:
-            print(f"{method_name} - Training Time: {numpyGD_time:.2f} seconds")
+            print(f"{method_name} - Training Time: {pytorchGD_time:.2f} seconds")
         else:
-            print(f"{method_name} - Training Time: {numpySGD_time:.2f} seconds")
+            print(f"{method_name} - Training Time: {pytorchSGD_time:.2f} seconds")
         print("-" * 30)
     print("="*50)
     
     plt.figure(figsize=(12, 8))
     line1, = plt.plot(losses1[50:], label='normalGD Loss', color='blue', markersize=1)
-    line2, = plt.plot(losses2[50:], label='numpyGD Loss', color='red', markersize=1)
-    line3, = plt.plot(losses3[50:], label='numpySGD Loss', color='green', markersize=1)
+    line2, = plt.plot(losses2[50:], label='pytorchGD Loss', color='red', markersize=1)
+    line3, = plt.plot(losses3[50:], label='pytorchSGD Loss', color='green', markersize=1)
     mplcursors.cursor([line1, line2, line3], hover=True)
     plt.xlabel('Batch')
     plt.ylabel('Loss')
-    plt.title('Training Loss Comparison: normalGD vs numpyGD vs numpySGD')
+    plt.title('Training Loss Comparison: normalGD vs pytorchGD vs pytorchSGD')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    folderName = "five_layer_testing"
+    folderName = "pytorch_five_layer_testing1"
     os.makedirs(folderName, exist_ok=True)
     base_filename = f'{folderName}/seed_{seed}_epochs_{epochs}_lr_{learning_rate}'
     filename = f'{base_filename}.png'
@@ -347,6 +360,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
     total_time = time.time() - start_time
     print(f"\nTotal execution time: {total_time:.2f} seconds")
 
+
 if __name__ == "__main__":
     for i in range(1):
-        compare_methods(seed=i, epochs=100, learning_rate=0.1)
+        compare_methods(seed=i, epochs=50, learning_rate=0.1)
