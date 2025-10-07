@@ -3,8 +3,8 @@
 This project compares three different ways of training a simple neural network on the MNIST dataset:
 
 1. **normalGD** – Uses PyTorch autograd for backprop and does manual parameter updates (no optimizer).  
-2. **numpyGD** – Re-implements the forward and backward pass in NumPy, updates all weights at once.  
-3. **numpySGD** – Similar to `numpyGD` but updates the second layer before calculating the first layer gradients (sequential style).  
+2. **pytorchGD** – Re-implements the forward and backward pass using PyTorch Tensors, updates all weights at once.  
+3. **pytorchSGD** – Similar to `pytorchGD` but updates the second layer before calculating the first layer gradients (sequential style).  
 
 The purpose of this project is not just to train MNIST, but to explore how different learning rules behave, especially those that deviate from standard gradient descent.
 
@@ -18,14 +18,14 @@ At the moment, most artificial neural networks are being trained with standard g
 Biological learning, on the other hand, is thought to be more "sequential" and less simultaneous. The idea of **sequential gradient descent** is to update the weights of one layer during the update before computing the gradients of the previous layer. That decision is more similar to how biological neurons may be adapting.  
 
 
-By writing backpropagation in NumPy manually, we circumvent all of the consequences of using autograd, we can explore these other alternative update rules. This allows us to ask the question, *What happens if we train ANNs with more biologically-inspired learning rules?*
+By writing backpropagation in PyTorch Tensors manually, we circumvent all of the consequences of using autograd, we can explore these other alternative update rules. This allows us to ask the question, *What happens if we train ANNs with more biologically-inspired learning rules?*
 
 ---
 
 ## Results so far
 
-- In the context of a simple **3-layer ANN**, the use of sequential gradient descent using NumPy SGD yields **faster convergence** at almost all connector/HP test cases (minus the very last test case in this cell) than regular, “push the button” PyTorch gradient descent.  
-- Surprisingly, in this study, NumPy GD (batch update rule) is faster than PyTorch autograd backpropagation too.  
+- In the context of a simple **3-layer ANN**, the use of sequential gradient descent using PyTorch SGD yields **faster convergence** at almost all connector/HP test cases (minus the very last test case in this cell) than regular, “push the button” PyTorch gradient descent.  
+- Surprisingly, in this study, PyTorch GD (batch update rule) is faster than PyTorch autograd backpropagation too.  
 - For now, we are not measuring accuracy—**it is important to point out that the different rules for updating weights lead to significantly different training dynamics**.  
 
 The meaning of the text is clear from the plots generated that examine the curve of training loss from each different update rule. The accuracy of the evaluation is printed after training.
