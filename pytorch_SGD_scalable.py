@@ -168,11 +168,16 @@ def pytorchSGD(model, images, labels_one_hot, learning_rate, activation='sigmoid
     return loss.item()
 
 
-def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid'):
+def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid', device='cpu'):
     start_time = time.time()
     model1 = create_model_with_seed(seed, activation)
     model2 = create_model_with_seed(seed, activation)
     model3 = create_model_with_seed(seed, activation)
+
+    # move models to device
+    model1.to(device)
+    model2.to(device)
+    model3.to(device)
     
     criterion = nn.MSELoss()
     losses1 = []
@@ -188,8 +193,11 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         epoch_loss = 0.0
         batch_count = 0
         for images, labels in train_loader:
+            # move batch to device
+            images, labels = images.to(device), labels.to(device)
+
             outputs = model1(images)
-            labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1])
+            labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1], device=device)
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
             loss = criterion(outputs, labels_one_hot)
             standardGD(model1, loss, learning_rate)
@@ -206,8 +214,11 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         epoch_loss = 0.0
         batch_count = 0
         for images, labels in train_loader:
+            # move batch to device
+            images, labels = images.to(device), labels.to(device)
+
             outputs = model2(images)
-            labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1])
+            labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1], device=device)
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
             loss_val = pytorchGD(model2, images, labels_one_hot, learning_rate, activation)
             epoch_loss += loss_val
@@ -223,8 +234,11 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         epoch_loss = 0.0
         batch_count = 0
         for images, labels in train_loader:
+            # move batch to device
+            images, labels = images.to(device), labels.to(device)
+
             outputs = model3(images)
-            labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1])
+            labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1], device=device)
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
             loss_val = pytorchSGD(model3, images, labels_one_hot, learning_rate, activation)
             epoch_loss += loss_val
@@ -246,8 +260,11 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         test_losses = []
         with torch.no_grad():
             for images, labels in test_loader:
+                # move batch to device
+                images, labels = images.to(device), labels.to(device)
+
                 outputs = model(images)
-                labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1])
+                labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1], device=device)
                 labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
                 test_loss = criterion(outputs, labels_one_hot)
                 test_losses.append(test_loss.item())
@@ -281,7 +298,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    folderName = "scalable_SGD"
+    folderName = "five_layer_testing"
     os.makedirs(folderName, exist_ok=True)
     base_filename = f'{folderName}/seed_{seed}_epochs_{epochs}_lr_{learning_rate}_{activation}'
     filename = f'{base_filename}.png'
@@ -295,20 +312,28 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
     print(f"\nTotal execution time: {total_time:.2f} seconds")
 
 
-if __name__ == "__main__":
-    # grab the MNIST data
-    transform = transforms.Compose([transforms.ToTensor()])
 
-    train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-    test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+if __name__ == "__main__":
+    # use GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # grab the CIFAR-10 data
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # normalize RGB channels
+    ])
+
+    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
 
     train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
 
-    # architecture (input -> hidden(s) -> output); change this to scale layers
-    layer_sizes = [28*28, 128, 64, 32, 16, 10]
+    # architecture (input -> hidden(s) -> output); adjust input size for RGB images
+    layer_sizes = [3*32*32, 512, 256, 128, 64, 10]
 
     for i in range(1):
-        compare_methods(seed=i, epochs=50, learning_rate=0.1, activation='relu')
+        compare_methods(seed=i, epochs=200, learning_rate=0.05, activation='relu')
