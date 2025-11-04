@@ -18,8 +18,11 @@ class FlexibleNN(nn.Module):
 
     def forward(self, x):
         x = x.view(-1, layer_sizes[0])  # flatten to match input size
-        for lin in self.layers:
-            x = self._apply_activation(lin(x))
+        for i, lin in enumerate(self.layers):
+            if i < len(self.layers) - 1:  # hidden layers
+                x = self._apply_activation(lin(x))
+            else:  # final layer (no activation)
+                x = lin(x)
         return x
 
     def _apply_activation(self, x):
@@ -180,9 +183,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
     model3.to(device)
     
     criterion = nn.MSELoss()
-    losses1 = []
-    losses2 = []
-    losses3 = []
+    losses1, losses2, losses3 = [], [], []
     
     print(f"Comparing methods with seed {seed}, activation={activation}")
     print("="*50)
@@ -193,7 +194,6 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         epoch_loss = 0.0
         batch_count = 0
         for images, labels in train_loader:
-            # move batch to device
             images, labels = images.to(device), labels.to(device)
 
             outputs = model1(images)
@@ -214,9 +214,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         epoch_loss = 0.0
         batch_count = 0
         for images, labels in train_loader:
-            # move batch to device
             images, labels = images.to(device), labels.to(device)
-
             outputs = model2(images)
             labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1], device=device)
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
@@ -234,9 +232,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         epoch_loss = 0.0
         batch_count = 0
         for images, labels in train_loader:
-            # move batch to device
             images, labels = images.to(device), labels.to(device)
-
             outputs = model3(images)
             labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1], device=device)
             labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
@@ -260,9 +256,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         test_losses = []
         with torch.no_grad():
             for images, labels in test_loader:
-                # move batch to device
                 images, labels = images.to(device), labels.to(device)
-
                 outputs = model(images)
                 labels_one_hot = torch.zeros(labels.size(0), layer_sizes[-1], device=device)
                 labels_one_hot.scatter_(1, labels.unsqueeze(1), 1)
@@ -298,7 +292,7 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    folderName = "five_layer_testing"
+    folderName = "5_layer_classification_testing"
     os.makedirs(folderName, exist_ok=True)
     base_filename = f'{folderName}/seed_{seed}_epochs_{epochs}_lr_{learning_rate}_{activation}'
     filename = f'{base_filename}.png'
@@ -308,32 +302,61 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
         counter += 1
     plt.savefig(filename)
 
+    torch.save(model1.state_dict(), "temp_model.pt")
+
     total_time = time.time() - start_time
     print(f"\nTotal execution time: {total_time:.2f} seconds")
+
+    return model1
 
 
 
 if __name__ == "__main__":
-    # use GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # grab the CIFAR-10 data
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # normalize RGB channels
+    # ======= Synthetic 2D Data =======
+    n_per_class = 10
+    class0 = np.array([
+        [0.1, 0.1], [0.25, 0.4], [0.1, 0.5], [0.6, 0.9],
+        [0.4, 0.2], [0.25, 0.6], [0.8, 0.1], [0.1, 0.8],
+        [0.7, 0.2], [0.5, 0.9]
+    ])
+    class1 = np.array([
+        [0.6, 0.35], [0.5, 0.6], [0.8, 0.4], [0.4, 0.4],
+        [0.7, 0.6], [0.35, 0.9], [0.3, 0.8], [0.8, 0.8],
+        [0.4, 0.6], [0.8, 0.9]
     ])
 
-    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-    test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    X = np.vstack([class0, class1]).astype(np.float32)
+    y = np.array([0]*n_per_class + [1]*n_per_class)
 
-    # train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+    X_tensor = torch.tensor(X)
+    y_tensor = torch.tensor(y)
+    dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=20, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(dataset, batch_size=20, shuffle=False)
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
+    # Architecture: input=2 -> hidden -> output=2
+    layer_sizes = [2, 16, 16, 2]
 
-    # architecture (input -> hidden(s) -> output); adjust input size for RGB images
-    layer_sizes = [3*32*32, 512, 256, 128, 64, 10]
+    # ======= Train and get model =======
+    trained_model = compare_methods(seed=10, epochs=500000, learning_rate=0.005, activation='relu')
 
-    for i in range(1):
-        compare_methods(seed=i, epochs=1, learning_rate=0.001, activation='relu')
+    # ======= Visualization =======
+    trained_model.eval()
+    xx, yy = np.meshgrid(np.linspace(0, 1, 200), np.linspace(0, 1, 200))
+    grid = torch.tensor(np.c_[xx.ravel(), yy.ravel()], dtype=torch.float32)
+    with torch.no_grad():
+        Z = trained_model(grid)
+        Z = torch.argmax(Z, axis=1).numpy().reshape(xx.shape)
+
+    plt.figure()
+    plt.contourf(xx, yy, Z, cmap=plt.cm.viridis, alpha=0.8)
+    plt.scatter(class0[:, 0], class0[:, 1], c='cyan', marker='^', edgecolor='k', s=80)
+    plt.scatter(class1[:, 0], class1[:, 1], c='orange', edgecolor='k', s=80)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.title("Decision Boundary Learned by MLP")
+    plt.show()
+
