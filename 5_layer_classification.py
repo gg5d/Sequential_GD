@@ -341,7 +341,7 @@ if __name__ == "__main__":
     layer_sizes = [2, 16, 16, 2]
 
     # ======= Train and get model =======
-    trained_model = compare_methods(seed=10, epochs=500000, learning_rate=0.005, activation='relu')
+    trained_model = compare_methods(seed=10, epochs=5000, learning_rate=0.005, activation='relu')
 
     # ======= Visualization =======
     trained_model.eval()

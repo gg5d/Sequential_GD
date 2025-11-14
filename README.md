@@ -1,6 +1,6 @@
 # Sequential Gradient Descent Comparison
 
-This project compares three different ways of training a simple neural network on the MNIST dataset:
+This project compares three different ways of training a simple neural network:
 
 1. **normalGD** – Uses PyTorch autograd for backprop and does manual parameter updates (no optimizer).  
 2. **pytorchGD** – Re-implements the forward and backward pass using PyTorch Tensors, updates all weights at once.  
@@ -35,13 +35,20 @@ The meaning of the text is clear from the plots generated that examine the curve
 ## Next steps
 
 - Scale up the ANN to more layers and units to see if the trends hold in larger networks.  
-- Make the architecture more flexible and support GPU acceleration by rewriting NumPy operations with PyTorch tensors.  
+- Make the architecture more flexible and support GPU acceleration by rewriting NumPy operations with PyTorch tensors.
 - Move beyond MNIST and test on harder datasets (e.g. CIFAR-10).  
 - Experiment with different architectures like CNNs and compare whether sequential updates still give faster convergence.  
 
 ---
 
 ## Updates
+
+**November 14th 2025**
+
+- PyTorch tensor implementations of both standard gradient descent and sequential gradient descent currently show **no significant difference** in behavior.
+- Switching to a classification task was attempted, but the results so far remain almost indistinguishable between the two update strategies.
+- To better understand the cause, I’ve gone back to basics: testing a **simple, naive neural network for classification** from scratch. *Building up incrementally to pinpoint the issue.*
+
 
 **October 7th 2025**
 
@@ -50,7 +57,16 @@ The meaning of the text is clear from the plots generated that examine the curve
 - Added support for different activation functions. You can now pick between **sigmoid**, **ReLU**, or **leaky ReLU** when running `compare_methods()`.  
 - The training code now works with **MNIST**, **FashionMNIST**, and **CIFAR-10**, with the right input size and normalization handled automatically.
 
-Overall, the project is now more flexible, faster, and easier to scale without changing the core idea of comparing sequential vs. standard gradient descent.  
+Overall, the project is now more flexible, faster, and easier to scale without changing the core idea of comparing sequential vs. standard gradient descent.
+
+
+## Current Working Files
+- `pytorch_SGD.py`: PyTorch Tensors implementation of a simple neural network based around 3 layers.
+- `pytorch_SGD_multilayer.py`: pytorch_SGD.py but with 5 layers instead of 3.
+- `pytorch_SGD_scalable.py`: pytorch_SGD.py but with any amount of defined layers.
+- `naive_higham.py`: Naive (3 layer) implementation of the Neural Network introduced in the Higham Paper
+- `naivetest.py`: naive_higham.py but done using classes rather than copy and pasting the same code twice.
+- `higham_SGD_ANN.py`: Older implementation of the ANN from the Higham paper, updated to fit the needs of testing SGD (currently unknown if the correct is accurate)
 
 
 ## Requirements
