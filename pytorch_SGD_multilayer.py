@@ -363,4 +363,4 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01):
 
 if __name__ == "__main__":
     for i in range(1):
-        compare_methods(seed=i, epochs=50, learning_rate=0.1)
+        compare_methods(seed=i, epochs=128, learning_rate=0.1)

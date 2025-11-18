@@ -312,28 +312,52 @@ def compare_methods(seed=42, epochs=100, learning_rate=0.01, activation='sigmoid
     print(f"\nTotal execution time: {total_time:.2f} seconds")
 
 
+# CIFAR-10
+# if __name__ == "__main__":
+#     # use GPU if available
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     print(f"Using device: {device}")
 
+#     # grab the CIFAR-10 data
+#     transform = transforms.Compose([
+#         transforms.ToTensor(),
+#         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # normalize RGB channels
+#     ])
+
+#     train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+#     test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+
+#     # train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+
+#     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
+#     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+#     # architecture (input -> hidden(s) -> output); adjust input size for RGB images
+#     layer_sizes = [3*32*32, 512, 256, 128, 64, 10]
+
+#     for i in range(1):
+#         compare_methods(seed=i, epochs=1, learning_rate=0.001, activation='relu')
+
+
+
+# MNIST
 if __name__ == "__main__":
     # use GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # grab the CIFAR-10 data
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # normalize RGB channels
-    ])
+    # grab the MNIST data (same hyperparams as your snippet)
+    transform = transforms.Compose([transforms.ToTensor()])
 
-    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-    test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-    # train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+    train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
 
-    # architecture (input -> hidden(s) -> output); adjust input size for RGB images
-    layer_sizes = [3*32*32, 512, 256, 128, 64, 10]
+    layer_sizes = [28*28, 128, 10]
 
     for i in range(1):
-        compare_methods(seed=i, epochs=1, learning_rate=0.001, activation='relu')
+        compare_methods(seed=i, epochs=100, learning_rate=0.1, activation='sigmoid')

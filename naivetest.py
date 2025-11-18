@@ -89,45 +89,9 @@ def train_backprop(network, x1, x2, y, eta, Niter, sample_order):
     return cost_value
 
 def train_sequential(network, x1, x2, y, eta, Niter, sample_order):
-    # '''
-    # Sequential gradient descent: update each layer as we compute its gradient, 
-    # then use updated weights for previous layer gradients
-    # '''
-    # xvec = np.zeros((2,1))
-    # yvec = np.zeros((2,1))
-    # cost_value = np.zeros((Niter,1))
-    
-    # for counter in np.arange(Niter):
-    #     k = randint(10)
-    #     xvec[0,0], xvec[1,0] = x1[k], x2[k]
-    #     yvec[:,0] = y[:, k]
-
-    #     # forward pass
-    #     a2 = activate(xvec, network.W2, network.b2)
-    #     a3 = activate(a2,   network.W3, network.b3)
-    #     a4 = activate(a3,   network.W4, network.b4)
-
-    #     # backward pass - update layer 4 first
-    #     delta4 = a4 * (1 - a4) * (a4 - yvec)
-    #     network.W4 -= eta * delta4 * a3.T
-    #     network.b4 -= eta * delta4
-
-    #     # then compute delta3 using updated W4, and update layer 3
-    #     delta3 = a3 * (1 - a3) * np.dot(network.W4.T, delta4)
-    #     network.W3 -= eta * delta3 * a2.T
-    #     network.b3 -= eta * delta3
-
-    #     # finally compute delta2 using updated W3, and update layer 2
-    #     delta2 = a2 * (1 - a2) * np.dot(network.W3.T, delta3)
-    #     network.W2 -= eta * delta2 * xvec.T
-    #     network.b2 -= eta * delta2
-
-    #     cost_value[counter] = cost_function(network.W2, network.W3, network.W4, 
-    #                                         network.b2, network.b3, network.b4, x1, x2, y)
-    
-    # return cost_value
     '''
-    Standard backpropagation: compute all gradients first, then update all layers simultaneously
+    Sequential gradient descent: update each layer as we compute its gradient, 
+    then use updated weights for previous layer gradients
     '''
     xvec = np.zeros((2,1))
     yvec = np.zeros((2,1))
@@ -143,24 +107,60 @@ def train_sequential(network, x1, x2, y, eta, Niter, sample_order):
         a3 = activate(a2,   network.W3, network.b3)
         a4 = activate(a3,   network.W4, network.b4)
 
-        # backward pass - compute all deltas first
+        # backward pass - update layer 4 first
         delta4 = a4 * (1 - a4) * (a4 - yvec)
-        delta3 = a3 * (1 - a3) * np.dot(network.W4.T, delta4)
-        delta2 = a2 * (1 - a2) * np.dot(network.W3.T, delta3)
-
-        # update all layers simultaneously
-        network.W2 -= eta * delta2 * xvec.T
-        network.W3 -= eta * delta3 * a2.T
         network.W4 -= eta * delta4 * a3.T
-
-        network.b2 -= eta * delta2
-        network.b3 -= eta * delta3
         network.b4 -= eta * delta4
 
+        # then compute delta3 using updated W4, and update layer 3
+        delta3 = a3 * (1 - a3) * np.dot(network.W4.T, delta4)
+        network.W3 -= eta * delta3 * a2.T
+        network.b3 -= eta * delta3
+
+        # finally compute delta2 using updated W3, and update layer 2
+        delta2 = a2 * (1 - a2) * np.dot(network.W3.T, delta3)
+        network.W2 -= eta * delta2 * xvec.T
+        network.b2 -= eta * delta2
+
         cost_value[counter] = cost_function(network.W2, network.W3, network.W4, 
-                                            network.b2, network.b3, network.b4, x1, x2, y) + 1
+                                            network.b2, network.b3, network.b4, x1, x2, y) + 0.1
     
     return cost_value
+    # '''
+    # Standard backpropagation: compute all gradients first, then update all layers simultaneously
+    # '''
+    # xvec = np.zeros((2,1))
+    # yvec = np.zeros((2,1))
+    # cost_value = np.zeros((Niter,1))
+    
+    # for counter in np.arange(Niter):
+    #     k = sample_order[counter]
+    #     xvec[0,0], xvec[1,0] = x1[k], x2[k]
+    #     yvec[:,0] = y[:, k]
+
+    #     # forward pass
+    #     a2 = activate(xvec, network.W2, network.b2)
+    #     a3 = activate(a2,   network.W3, network.b3)
+    #     a4 = activate(a3,   network.W4, network.b4)
+
+    #     # backward pass - compute all deltas first
+    #     delta4 = a4 * (1 - a4) * (a4 - yvec)
+    #     delta3 = a3 * (1 - a3) * np.dot(network.W4.T, delta4)
+    #     delta2 = a2 * (1 - a2) * np.dot(network.W3.T, delta3)
+
+    #     # update all layers simultaneously
+    #     network.W2 -= eta * delta2 * xvec.T
+    #     network.W3 -= eta * delta3 * a2.T
+    #     network.W4 -= eta * delta4 * a3.T
+
+    #     network.b2 -= eta * delta2
+    #     network.b3 -= eta * delta3
+    #     network.b4 -= eta * delta4
+
+    #     cost_value[counter] = cost_function(network.W2, network.W3, network.W4, 
+    #                                         network.b2, network.b3, network.b4, x1, x2, y) + 1
+    
+    # return cost_value
 
 
 
@@ -175,20 +175,20 @@ y[0:1, 5: ] = np.zeros((1, 5))
 y[0:1, 5: ] = np.zeros((1, 5))
 y[1: , 5: ] = np.ones((1,  5))
 
-eta = 0.75
+eta = 0.1
 Niter = 100000
 
 # Generate sample order once so both models use the same sequence
-seed(0)
+seed(10)
 sample_order = randint(10, size=Niter)
 
 # Train network A with backpropagation
-seed(0)
+seed(10)
 networkA = NeuralNetwork()
 cost_value_A = train_backprop(networkA, x1, x2, y, eta, Niter, sample_order)
 
 # Train network B with sequential gradient descent
-seed(0)
+seed(10)
 networkB = NeuralNetwork()
 cost_value_B = train_sequential(networkB, x1, x2, y, eta, Niter, sample_order)
 
