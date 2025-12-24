@@ -123,7 +123,7 @@ def train_sequential(network, x1, x2, y, eta, Niter, sample_order):
         network.b2 -= eta * delta2
 
         cost_value[counter] = cost_function(network.W2, network.W3, network.W4, 
-                                            network.b2, network.b3, network.b4, x1, x2, y) + 0.1
+                                            network.b2, network.b3, network.b4, x1, x2, y) + 0.5
     
     return cost_value
     # '''
@@ -166,8 +166,8 @@ def train_sequential(network, x1, x2, y, eta, Niter, sample_order):
 
 import matplotlib.pylab as plt
 
-x1 = np.array([0.1, 0.3, 0.1, 0.6, 0.4, 0.6, 0.5, 0.9, 0.4, 0.7])
-x2 = np.array([0.1, 0.4, 0.5, 0.9, 0.2, 0.3, 0.6, 0.2, 0.4, 0.6])
+x1 = np.array([0.8, 0.3, 0.1, 0.6, 0.4, 0.6, 0.5, 0.9, 0.4, 0.7])
+x2 = np.array([0.4, 0.4, 0.5, 0.9, 0.2, 0.3, 0.6, 0.2, 0.4, 0.6])
 
 y           = np.zeros((2, 10))
 y[0:1, 0:5] = np.ones((1,  5))
@@ -175,8 +175,8 @@ y[0:1, 5: ] = np.zeros((1, 5))
 y[0:1, 5: ] = np.zeros((1, 5))
 y[1: , 5: ] = np.ones((1,  5))
 
-eta = 0.1
-Niter = 100000
+eta = 0.05
+Niter = 500000
 
 # Generate sample order once so both models use the same sequence
 seed(10)
@@ -203,29 +203,51 @@ X1Test = np.array(X.ravel())
 X2Test = np.array(Y.ravel())
 
 XTest  = np.stack((X1Test, X2Test), axis = 1)
-empty  = np.zeros(200*200)
+emptyA = np.zeros(200*200)
+emptyB = np.zeros(200*200)
 
 xvec = np.zeros((2,1))
 for i in np.arange(XTest.shape[0]):
 
     xvec[0,0], xvec[1,0] = XTest[i, 0], XTest[i, 1]
 
+    # Network A predictions
+    YPredictionsA = predict(networkA.W2, networkA.W3, networkA.W4, 
+                           networkA.b2, networkA.b3, networkA.b4, xvec)
+    YPredictionsA = np.array(YPredictionsA[0] >= YPredictionsA[1])
+    if YPredictionsA[0] == True:
+        emptyA[i] = 1
 
-    YPredictions = predict(networkA.W2, networkA.W3, networkA.W4, 
-                          networkA.b2, networkA.b3, networkA.b4, xvec)
-    YPredictions = np.array(YPredictions[0] >= YPredictions[1])
+    # Network B predictions
+    YPredictionsB = predict(networkB.W2, networkB.W3, networkB.W4, 
+                           networkB.b2, networkB.b3, networkB.b4, xvec)
+    YPredictionsB = np.array(YPredictionsB[0] >= YPredictionsB[1])
+    if YPredictionsB[0] == True:
+        emptyB[i] = 1
 
+YPredA = emptyA.reshape((200, 200))
+YPredB = emptyB.reshape((200, 200))
 
-    if YPredictions[0] == True:
-        empty[i] = 1
-
-
-YPred = empty.reshape((200, 200))
 import matplotlib.pyplot as plt
-plt.figure()
-#plt.imshow(YPred)
-plt.contourf(X, Y, YPred)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-plt.scatter(x1[0:5], x2[0:5], marker='^', lw=5)
-plt.scatter(x1[5:],  x2[5:], marker='o', lw=5)
-# plt.show()
+# Network A plot
+ax1.contourf(X, Y, YPredA)
+ax1.scatter(x1[0:5], x2[0:5], marker='^', lw=5, label='Class 1')
+ax1.scatter(x1[5:],  x2[5:], marker='o', lw=5, label='Class 2')
+ax1.set_title('Network A (Backpropagation)')
+ax1.set_xlabel('x1')
+ax1.set_ylabel('x2')
+ax1.legend()
+
+# Network B plot
+ax2.contourf(X, Y, YPredB)
+ax2.scatter(x1[0:5], x2[0:5], marker='^', lw=5, label='Class 1')
+ax2.scatter(x1[5:],  x2[5:], marker='o', lw=5, label='Class 2')
+ax2.set_title('Network B (Sequential GD)')
+ax2.set_xlabel('x1')
+ax2.set_ylabel('x2')
+ax2.legend()
+
+plt.tight_layout()
+plt.show()

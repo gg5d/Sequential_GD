@@ -61,7 +61,7 @@ os.makedirs(output_dir, exist_ok=True)
 W2,W3,W4 = normal(size=(2,2)), normal(size=(3,2)), normal(size=(2, 3))
 b2,b3,b4 = normal(size=(2,1)), normal(size=(3,1)), normal(size=(2, 1))
 
-eta = 0.25
+eta = 0.75
 Niter = 1000
 
 
@@ -114,7 +114,7 @@ for counter in np.arange(Niter):
 
 plt.plot(cost_value)
 plt.savefig(os.path.join(output_dir, "loss_curve2.png"))
-# plt.show()
+plt.show()
 
 X, Y = np.meshgrid(np.linspace(0, 1, 200), np.linspace(0, 1, 200))
 
@@ -147,7 +147,7 @@ plt.contourf(X, Y, YPred)
 plt.scatter(x1[0:5], x2[0:5], marker='^', lw=5)
 plt.scatter(x1[5:],  x2[5:], marker='o', lw=5)
 plt.savefig(os.path.join(output_dir, "contour_plot2.png"))
-# plt.show()
+plt.show()
 
 
 

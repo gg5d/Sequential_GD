@@ -352,12 +352,12 @@ if __name__ == "__main__":
     train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
     test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-    train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
+    # train_dataset = torch.utils.data.Subset(train_dataset, range(5000))
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     layer_sizes = [28*28, 128, 10]
 
     for i in range(1):
-        compare_methods(seed=i, epochs=100, learning_rate=0.1, activation='sigmoid')
+        compare_methods(seed=i, epochs=5, learning_rate=0.1, activation='sigmoid')
